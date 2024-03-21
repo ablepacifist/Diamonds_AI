@@ -1,0 +1,433 @@
+---
+title: "3190 project"
+author: "Alexander Dyakin"
+date: "2024-01-17"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+```{r, echo =FALSE,include=FALSE}
+## install the libraries
+#Note: ggplot2 is included in tidyverse package
+packages <- c("tidyverse","neuralnet", "gmp")
+install.packages(setdiff(packages, rownames(installed.packages())))
+library(tidyverse)
+library(neuralnet)
+library(gmp)
+##library(igraph) // changed my mine on what ill use
+options(scipen = 999)
+```
+*We will be using the "diamonds" dataset inside the ggplot2 package in R. this data contains attributes of 54,000 different diamonds. These attributes are* *price, weight (carat), cut (qualitative), color (qualitative), clarity, length (mm), width (mm), depth (mm),depth (% of mean), and table (top with relative to widest point).We will be using mostly cut, weight, and price.*
+*As you can see, there is a mix of qualitative and quantitative measurements.*
+
+Start by visualizing the data in a scatter plot:
+```{r,echo=FALSE}
+## download data from diamonds (I won't print it out. Save paper)
+data = data.frame(diamonds)
+ggplot(data=diamonds, aes(x=carat, y=price, color=cut)) + 
+  geom_point()
+```
+Manipulate data
+```{r, echo=FALSE}
+## include qualitative data
+myData = data %>% mutate_if(is.character, as.factor)
+
+myData$cut = unclass(myData$cut)
+myData$cut = as.double(myData$cut)
+
+myData$color = unclass(myData$color)
+myData$color = as.double(myData$color)
+
+myData$clarity = unclass(myData$clarity)
+myData$clarity = as.double(myData$clarity)
+
+print("summary of the diamonds data:")
+summary(myData)
+```
+*Let's compare data sets and determine their accuracy using back propagation.*
+*We will use the "neuralnet" package that is a little outdated but suits our purpose here.*
+*Later we will build our own program from scratch to do this.*
+*arbitrary 3 hidden layers and 90% of the data is in out training data set with remaining 10% used to test.*
+```{r,echo=TRUE}
+# Split the data into test and training data
+  data_rows = floor(.9*nrow(myData))
+  ##get a single row from the data that is .9 of the nrows(l).
+  random = sample(c(1:nrow(myData)),data_rows)
+  ##training data first column. X
+  data_training = myData[random,]
+  ##test data first column. X
+  data_test = myData[-random,]
+#Begin training
+  ## the other variables to add=( + x + y + z + depth + color + clarity + table  )
+  model = neuralnet(carat ~ cut + price, data = data_training, hidden = c(8,6), linear.output = FALSE)
+  plot(model,rep = "best")
+```
+*The algorithm predicted the carat based on price and cut. This is what the weight(carat) would be based on the cut[1-5]:*
+```{r,echo=FALSE}
+options(max.print = 10000)        # Change global options
+pred = predict(model, data_test)
+labels = c("carat")
+predicted_carat = data.frame(max.col(pred))%>% mutate(pred = labels[max.col.pred.]) %>% select(2) %>% unlist()
+result = table(data_test$price, predicted_carat)
+head(result)
+```
+```{r,echo=FALSE}
+check = as.numeric(with(data_test,carat <=max.col(pred)+.5 & carat >=max.col(pred)-.5))
+accuracy = (sum(check)/nrow(data_test))*100
+print(paste0("the algorithum was ", accuracy, "% accurate within 1 carat"))
+```
+*next we'll show how the algorithm does predicting price based on all factors of the diamond (cut, carat, x, y, z, depth, color, clarity, table).*
+```{r, echo=FALSE}
+# split data into test and training datasets
+  data_rows = floor(.9*nrow(myData))
+  ##get a single row from the data that is .9 of the nrows(l).
+  random = sample(c(1:nrow(myData)),data_rows)
+  ##training data first column. X
+  data_training = myData[random,]
+  ##test data first column. X
+  data_test = myData[-random,]
+#training
+  model = neuralnet(price ~ cut + carat  + x + y + z + depth + color + clarity + table , data = data_training, hidden = c(10,8,6), linear.output = FALSE)
+#set up predicted values for price related to carat
+  pred = predict(model, data_test)
+  labels = c("price")
+  predicted_price = data.frame(max.col(pred))%>% mutate(pred = labels[max.col.pred.]) %>% select(2) %>% unlist()
+  table(data_test$cut, predicted_price)
+#test accuracy
+  check = as.numeric(with(data_test,price <=max.col(pred)+1000 & price >=max.col(pred)-1000))
+  accuracy = (sum(check)/nrow(data_test))*100
+  print(paste0("the algorithum was ", accuracy, "% accurate within 2000$...That isnt very good"))
+```
+*Now we will try it with the iris dataset from the default R repository.*
+*This dataset has 150 types of flower's and there species and flower length, width, and length.*
+```{r, echo=FALSE}
+## format the data:
+  iris = iris %>% mutate_if(is.character, as.factor)
+  print("summary of the iris data:")
+  summary(iris)
+# Build the neural network:
+  data_rows = floor(.9*nrow(iris))
+  ##get a single row from the data that is .9 of the nrows(l).
+  random = sample(c(1:nrow(iris)),data_rows)
+  ##training data first column. X
+  data_training = iris[random,]
+  ##test data first column. X
+  data_test = iris[-random,]
+#Begin training
+  model = neuralnet(Species~Sepal.Length+Sepal.Width+Petal.Length+Petal.Width , data = data_training, hidden = c(4,2), linear.output = FALSE)
+  plot(model,rep = "best")
+#predict results:
+  pred = predict(model, data_test)
+  labels = c("Species")
+  predicted_species = data.frame(max.col(pred))%>% mutate(pred = labels[max.col.pred.]) %>% select(2) %>% unlist()
+#check accuracy:
+  check = as.numeric(data_test$Species) == max.col(pred)
+  accuracy = (sum(check)/nrow(data_test))*100
+  print(paste0("the algorithum was ", accuracy, "% accurate"))
+```
+
+
+*Next We will attempt to replicate the neural network and backtracking algorithms using diamonds database to predict carat.*
+*Note: since R and my computer cant handle too large of data, I have taken a random 10000 lines of data to use in the algorithm*
+```{r,echo=FALSE}
+# amount of data get too large for R to handle so ill shorten it.
+myData = myData[sample(nrow(myData), size= 10000), ]
+##myData = myData[c('price','carat','cut')]
+
+myData$cut = unclass(myData$cut)
+myData$cut = as.double(myData$cut)
+
+myData$color = unclass(myData$color)
+myData$color = as.double(myData$color)
+
+myData$clarity = unclass(myData$clarity)
+myData$clarity = as.double(myData$clarity)
+```
+
+```{r,echo=TRUE,include=TRUE}
+##create training and test datasets
+  test_split_index = .9 *nrow(myData)
+  train = myData[1:test_split_index,]
+  test = myData[(test_split_index+1):nrow(myData),]
+#normalize the data (0-1)
+  x_train = scale(train[,c(1:10)]) # change 10 to 2(num of inputs)
+  y_train = train$carat ## what we want to find out
+  dim(y_train) = c(length(y_train), 1) # add extra dimension to the vector
+  x_test = scale(test[,c(1:10)]) # change 10 to 2(num of inputs)
+  y_test = test$carat ## what we want to find out
+  dim(y_test) = c(length(y_test),1) # add extra dimension to the vector
+# construct out matrix
+  #note: R makes matrices go by column and so we need to transpose them and make them look at it by row like a normal person
+  #trains
+  x_train = as.matrix(x_train,byrow = TRUE)
+  x_train = t(x_train)
+  y_train = as.matrix(y_train,byrow = TRUE)
+  y_train = t(y_train)
+  #tests
+  x_test = as.matrix(x_test,byrow = TRUE)
+  x_test = t(x_test)
+  y_test = as.matrix(y_test,byrow = TRUE)
+  y_test = t(y_test)
+#build nerual network
+#size of the layers( returns number of nodes in the input output and hidden layers)
+  getLayerSize = function(input,output,hidden,train=TRUE){
+    numx = dim(input)[1]
+    numh = hidden
+    numy = dim(output)[1]
+    size = list("numx" = numx,"numh" = numh,"numy" = numy)
+    return(size)
+  }
+#layer_sizes
+  layer_sizes = getLayerSize(x_train,y_train,hidden =4)
+#create weights and bias matricies
+  init = function(x, layer_sizes){
+    m = dim(data.matrix(x))[2] ##
+    numx = layer_sizes$numx
+    numh = layer_sizes$numh
+    numy = layer_sizes$numy
+    w1 = matrix(runif(numh *numx), nrow = numh, ncol = numx, byrow = TRUE) *.01
+    b1 = matrix(rep(0,numh), nrow = numh)
+    w2 = matrix(runif(numy *numh),nrow = numy, ncol =numh, byrow = TRUE) *.01
+    b2 = matrix(rep(0,numy), nrow = numy)
+    parameters = list("w1" = w1, "b1"=b1,"w2" = w2,"b2" = b2)
+    return(parameters)
+  }
+  init_param = init(x_train, layer_sizes)
+  lapply(init_param, function(x) dim(x))
+# create sigmond function
+  #note: tanh() is already part of the overall R package. so we could use that instead
+  sigmond = function(x){
+    return (1/(1+exp(-x))) 
+  }
+```
+
+*Forward propagation:*
+```{r,echo=TRUE,include=TRUE}
+#forward propagation
+# x is the input layer
+# params contain weights
+# layer_sizes format our calculations to fit with the layer sizes
+forwardPropagation = function(x,params,layer_sizes){
+  #get dimensions
+    m = dim(x)[2]
+    numh = layer_sizes$numh
+    numy = layer_sizes$numy
+  #get old weights and bias
+    w1 = params$w1
+    b1 = params$b1
+    w2 = params$w2
+    b2 = params$b2
+  #create new bias
+    b1_new = matrix(rep(b1,m), nrow = numh)
+    b2_new = matrix(rep(b2,m), nrow = numy)
+  #create hidden layers(z) based on new bias and activation function(sigmond)
+    #note: %*% is matrix multiplication in R
+    z1 = w1 %*% x + b1_new
+    a1 = sigmond(z1)
+    z2 = w2 %*% a1 +b2_new
+    a2 = sigmond(z2)
+  #store these in the result and return
+    result = list("z1" = z1, "a1" = a1, "z2" = z2, "a2" = a2)
+    return(result)
+}
+forwardProp <- forwardPropagation(x_train, init_param, layer_sizes)
+lapply(forwardProp, function(x) dim(x))
+```
+*cost function:*
+```{r,echo=TRUE,include=TRUE}
+#cost function in the form of binary cross entropy loss function (log loss)
+# x is the input layer
+# y is the output layer
+# hidden_layers contain activation function results
+computeCost = function(x,y,hidden_layers){
+  # get final activation function results and dimensions
+  m =dim(x)[2]
+  a2 = hidden_layers$a2
+  #log prob function
+  logprobs = (log(a2)*y) + (log(1-a2) *(1-y))
+  cost = -sum(logprobs/m)
+  return(cost)
+}
+```
+*Next We'll create the back propagation function:*
+```{r,echo=TRUE,include=TRUE}
+#back propagation
+# x is the input layer
+# y is the output layer
+# hidden_layers contain activation function results
+# params contain weights
+# layer_sizes format our calculations to fit with the layer sizes
+backPropagation = function(x,y,hidden_layers,params,layer_sizes){
+  #get dimensions and sizes
+    m = dim(x)[2]
+    numx = layer_sizes$numx
+    numh = layer_sizes$numh
+    numy = layer_sizes$numy
+  #get hidden layer activation function results and final weights
+    a1 = hidden_layers$a1
+    a2 = hidden_layers$a2
+    w2 = params$w2
+  # create list of gradient matrices for the final layer first
+    d_z2 = a2 -y
+    d_w2 = (1/m) * (d_z2 %*% t((a1)))
+    d_b2 = matrix((1/m) *sum(d_z2), nrow = numy)
+    d_b2_new = matrix(rep(d_b2,m), nrow = numy)
+  # create list of gradient matrices for the previous layer. hence the name "back" propagation
+    d_z1 = (t(w2) %*% d_z2) * (1-a1^2)
+    d_w1 = (1/m) * (d_z1 %*% t(x))
+    d_b1 = matrix((1/m)*sum(d_z1),nrow = numh)
+    d_b1_new = matrix(rep(d_b1,m), nrow = numh)
+    
+      grades = list("d_w1" = d_w1, "d_b1" = d_b1,"d_w2" = d_w2,"d_b2" = d_b2)
+    return (grades)
+      }
+# run back propagation function:
+backProp = backPropagation(x_train,y_train,forwardProp, init_param, layer_sizes)
+lapply(backProp,function(x) dim(x))
+```
+*update parameters:*
+```{r,echo=TRUE,include=TRUE}
+#update parameters
+# grades is the change we should make that we found in back prop
+# params are the weights and bias
+# learning rate can be set by function call. will apply to all changes
+updateParam = function(grades,params, learningRate){
+  #get old weights and bias
+    w1 = params$w1
+    b1 = params$b1
+    w2 = params$w2
+    b2 = params$b2
+  #get grades from back propagation
+    d_w1 = grades$d_w1
+    d_b1 = grades$d_b1
+    d_w2 = grades$d_w2
+    d_b2 = grades$d_b2
+  #apply the learning rate and grades to the weights and bias
+    w1 = w1 - learningRate * d_w1
+    b1 = b1 - learningRate * d_b1
+    w2 = w2 - learningRate * d_w2
+    b2 = b2 - learningRate * d_b2
+    
+    updated_parmas = list("w1" = w1, "b1" = b1, "w2" = w2, "b2" = b2)
+    return (updated_parmas)
+}
+##note: if weights have the same shape, everything should be correct
+updated_params = updateParam(backProp, init_param,learningRate = .01)
+lapply(updated_params, function(x) dim(x))
+```
+*Now we will make a umbrella function that will train our model:*
+```{r,echo=TRUE,include=TRUE}
+#training. lets put it all together and train some neural network
+##its the final count down. didouudo didududdudu dididoodu didudoododododooooooooo
+# x is the input layer
+# y is the output layer
+# hidden are the hidden neurons
+# learningRate is passed to updateParam
+trainingModel = function(x,y,iterations, hidden, learningRate){
+  layer_sizes = getLayerSize(x,y,hidden)
+  init_param = init(x,layer_sizes)
+  cost = computeCost(x,y,forwardProp)
+  cost_previous = c()
+  # how for how many times we want to iterate do the following:
+  #forward propagate, compute cost, back propagate, change weights and bias, add cost history.
+  for (i in 1:iterations) {
+    forwardProp = forwardPropagation(x,init_param,layer_sizes)
+    cost = computeCost(x,y,forwardProp)
+    backprop = backPropagation(x,y, forwardProp, init_param, layer_sizes)
+    updated_params = updateParam(backprop,init_param,learningRate = learningRate)
+    init_param = updated_params
+    cost_previous = c(cost_previous,cost)
+    if( i %% 100 == 0)cat("Iteration", i, " | Cost: ", cost, "\n")
+  }
+  result_model = list("updated_params" = updated_params,"cost_hist"= cost_previous)
+  return(result_model)
+}
+```
+*Run the training program:*
+```{r,echo=FALSE}
+numIterations = 600
+numHidden = 40
+mylearningRate = 0.9
+train_model = trainingModel(x_train, y_train,hidden = numHidden, iterations = numIterations, learningRate = mylearningRate)
+```
+*for extra comparison, We'll show a linear regression training model to compare performance of neural network( is this logistic regression?). Then generate predictions*
+```{r,echo=FALSE,include=TRUE}
+linearRegression = glm(carat ~ price + cut, data = myData)
+linearRegression
+prediction_lr =  round(as.vector(predict(linearRegression,test[, c(1,2,7)] )))
+```
+```{r,echo=FALSE}
+makePrediction <- function(x, y, hidden){
+    layer_sizes = getLayerSize(x, y, hidden)
+    params = train_model$updated_params
+    fwd_prop = forwardPropagation(x, params, layer_sizes)
+    pred = fwd_prop$a2
+    
+    return (pred)
+}
+result_prediction = makePrediction(x_test,y_test,numHidden)
+result_prediction = round(result_prediction)
+#confusion matrix:
+  tb_nn = table(y_test, result_prediction)
+  tb_lr = table(y_test, prediction_lr)
+  
+  #print("neural network prediction using backpropigation")
+# tb_nn
+ # print("linear regression model predictions")
+  # tb_lr
+```
+*We won't spit out the results of the prediction to save some trees but suffice to say, they vary wildly.*
+*accuracy is calculated by: *
+*(num accurate positives and negatives)/(num of accurate and inaccurate positives and negatives)*
+
+```{r,echo=FALSE}
+compare_accuracy = function(tb,name){
+  accuracy = (tb[1]+tb[4])/(tb[1]+ tb[2]+tb[3]+tb[4])
+  recall = tb[4]/(tb[4] + tb[3])
+  precision = tb[4]/(tb[4] + tb[2])
+  f1Score = 2 * ((precision * recall) / (precision + recall))
+  
+  cat(name,"-\n")
+  cat("\tAccuracy = ", accuracy*100, "%.")
+  cat("\n\tPrecision = ", precision*100, "%.")
+  cat("\n\tRecall = ", recall*100, "%.")
+  cat("\n\tF1 Score = ", f1Score*100, "%.\n\n")
+} 
+compare_accuracy(tb_nn,"neural network with backPropagation")
+##compare_accuracy(tb_lr,"linear regression model")
+```
+
+*The back propagation that we used is sometimes more accurate than the neuralnet version.*
+
+if this is still here it is because i forgot to delete it
+K-nearest neighbors of the diamonds graph.
+k-nearest neighbors is used for classification problems
+while k-mean algorithms is used for clustering.
+(I will try and save trees by not showing the data before/after normalizing, randomizing, and training)
+```{r}
+##normalize function will simplify things into values between 1 and 0.
+normalize = function(A) { (A -min(A))/(max(A)-min(A))   }
+##get a single row from the data that is .9 of the nrows.
+random = sample(1:nrow(data),.9 * nrow(data))
+## normalize the columns that will be our predictors in k-nearest neighbors. 
+data_norm = as.data.frame(lapply(data[,c(1,5,6,7,8,9,10)],normalize))
+#training data first column.
+data_training = data_norm[random,]
+#test data first column.
+data_test = data_norm[-random,]
+## second column is of training is what we need to predict about the testing data.
+data_target <- as.factor(data[random,2])
+## second column is actual values of test data set.
+test_target = as.factor(data[-random,2])
+## run k-nearest neighbors function. we will be using k=25 to find the 25 closest neighbors. Look at the closet k neighbors and determine their similarities. This will be a classification of those vertices.
+library(class)
+prediction = knn(data_training,data_test,cl = data_target,k=25)
+##compare the results with what they should be in terms of % accurate.
+tb = table(prediction,test_target)
+accuracy = function(x){sum(diag(x)/sum(rowSums((x))))*100}
+accuracy(tb)
+```
